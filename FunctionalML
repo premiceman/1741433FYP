@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar  2 14:41:18 2022
+
+@author: premvyas
+"""
+
+
+
+##Main Program
+
+### ------------------------------ MODULE IMPORTS
+
+import sys
+import pandas
+import nltk
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger') 
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk import sent_tokenize, word_tokenize
+import pandas as pd
+import csv
+##import parser
+import re
+import sklearn
+import matplotlib
+
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.metrics import accuracy_score
+
+from sklearn.linear_model import PassiveAggressiveClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.tree import DecisionTreeClassifier
+
+### -------------------------------- END OF IMPORTS
+
+### -------------------------------- IMPORTING THE DATASETS
+
+#Importing the Train.csv dataset
+
+df=pd.read_csv('/Users/premvyas/opt/miniconda3/envs/myenv/train.csv')  
+convert_val = {0: 'Real', 1: 'Fake'}
+df['label'] = df['label'].replace(convert_val)
+print(df.label.value_counts())
+print()
+print("--------- Train.csv Dataset ------------")
+print(df)
+print()
+
+#Importing the true and fake datasets used for accuracy calculations
+
+df_true=pd.read_csv('/Users/premvyas/opt/miniconda3/envs/myenv//True.csv')
+df_true['label']='Real'
+#The line of code below redacts the publishers from the articles. We don't want this to skew the algorithms determination of whether the article is real or fake
+df_true_rep=[df_true['text'][i].replace('WASHINGTON (Reuters) - ','').replace('LONDON (Reuters) - ','').replace('(Reuters) - ','') for i in range(len(df_true['text']))]
+df_true['text']=df_true_rep
+df_fake=pd.read_csv('/Users/premvyas/opt/miniconda3/envs/myenv//Fake.csv')
+df_fake['label']='Fake'
+df_final=pd.concat([df_true,df_fake])
+df_final=df_final.drop(['subject','date'], axis=1)
+df_fake
+print("--------- True.csv Dataset ------------")
+print(df_true)
+print()
+print("--------- Fake.csv Dataset ------------")
+print(df_fake)
+print()
+
+df2=pd.read_csv('/Users/premvyas/opt/miniconda3/envs/myenv/Train2.csv')  
+print()
+print("--------- Train2.csv Dataset ------------")
+print(df2)
+print()
+
+### ---------------------------- END OF IMPORTING THE DATASETS
+
+
+### -------------------------------- TFIDF VECTORISATION OF TRAIN.CSV DATASET
+
+x_train, x_test, y_train, y_test = train_test_split(df['text'], df['label'], test_size=0.25, random_state=7, shuffle=True)
+tfidf_vectorizer = TfidfVectorizer(stop_words='english', max_df=0.75)
+
+x2_train, x2_test, y2_train, y2_test = train_test_split(df2['text'], df2['label'], test_size=0.25, random_state=7, shuffle=True)
+
+vec_train=tfidf_vectorizer.fit_transform(x_train.values.astype('U'))
+vec_test=tfidf_vectorizer.transform(x_test.values.astype('U'))
+
+vec_train2=tfidf_vectorizer.fit_transform(x2_train.values.astype('U'))
+vec_test2=tfidf_vectorizer.transform(x2_test.values.astype('U'))
+
+### -------------------------------- END OF TFIDF VECTORISATION OF TRAIN.CSV DATASET
+
+
+### -------------------------------- PASSIVE AGGRESSIVE CLASSIFIER
+
+#Training the classifier    
+pac=PassiveAggressiveClassifier(max_iter=50)
+pac.fit(vec_train,y_train)
+y_pred=pac.predict(vec_test)
+
+pac.fit(vec_train2,y2_train)
+y2_pred=pac.predict(vec_test2)
+
+
+#Classification Function
+def PACClassifier(newtext):
+    vec_newtest=tfidf_vectorizer.transform([newtext])
+    pac.fit(vec_train2,y2_train)
+    y_pred1=pac.predict(vec_newtest)
+    return y_pred1[0] 
+
+#Accuracy on Datasets
+def PACAccuracy():
+    score=accuracy_score(y_test, y_pred)
+    score2=accuracy_score(y2_test, y2_pred)
+    print(f'PAC Accuracy: {round(score*100,2)}%')
+    print(f'PAC Accuracy2: {round(score2*100,2)}%')
+    return score2
+    #realtestacc = sum([1 if PACClassifier((df_true['text'][i]))=='Real' else 0 for i in range(len(df_true['text']))])/df_true['text'].size    
+    #faketestacc = sum([1 if PACClassifier((df_fake['text'][i]))=='Fake' else 0 for i in range(len(df_fake['text']))])/df_fake['text'].size
+    #print(f'The accuracy of the real news test set of data with the Passive Aggressive Classifier is {round(realtestacc * 100, 2)}%')
+    #print(f'The accuracy of the fake news test set of data with the Passive Aggressive Classifier is {round(faketestacc * 100, 2)}%')
+
+### -------------------------------- END OF PASSIVE AGGRESSIVE CLASSIFIER
+
+### -------------------------------- DECISION TREE CLASSIFICATION
+
+
+
+#Classification Function
+def DecTreeClassifier(newtext):
+    clf = DecisionTreeClassifier()
+    vec_newtest=tfidf_vectorizer.transform([newtext])
+    clf.fit(vec_train2, y2_train)
+    #sklearn.tree.plot_tree(clf)
+    clfpred1=clf.predict(vec_newtest)
+    return clfpred1[0] 
+
+#Accuracy on Datasets
+def DecTreeAccuracy():
+    clf = DecisionTreeClassifier()
+    clf.fit(vec_train2, y2_train)
+    DTAccuracy = clf.score(vec_test2, y2_test)  
+    print(f'Decision Tree Accuracy: {round(DTAccuracy * 100,2)}%')
+    return DTAccuracy
+    #realtestacc = sum([1 if DecTreeClassifier((df_true['text'][i]))=='Real' else 0 for i in range(len(df_true['text']))])/df_true['text'].size    
+    #faketestacc = sum([1 if DecTreeClassifier((df_fake['text'][i]))=='Fake' else 0 for i in range(len(df_fake['text']))])/df_fake['text'].size
+    #print(f'The accuracy of the real news test set of data with the Decision Tree Classifier is {round(realtestacc * 100, 2)}%')
+    #print(f'The accuracy of the fake news test set of data with the Decision Tree Classifier is {round(faketestacc * 100, 2)}%')
+
+### -------------------------------- END OF DECISION TREE CLASSIFICATION
+
+### -------------------------------- LOGISTIC REGRESSION CLASSIFICATION
+
+#Classification Function
+def LogRegClassifier(newtext):
+    logreg = LogisticRegression()
+    vec_newtest=tfidf_vectorizer.transform([newtext])
+    logreg.fit(vec_train2, y2_train)
+    logreg_pred=logreg.predict(vec_newtest)
+    return logreg_pred[0] 
+
+#Accuracy on Datasets
+def LogRegAccuracy():
+    logreg = LogisticRegression()
+    logreg.fit(vec_train2, y2_train)
+    LRAccuracy = logreg.score(vec_test2, y2_test)
+    print(f'Logistic Regression Accuracy: {round(LRAccuracy * 100,2)}%')
+    return LRAccuracy
+    #realtestacc = sum([1 if LogRegClassifier((df_true['text'][i]))=='Real' else 0 for i in range(len(df_true['text']))])/df_true['text'].size    
+    #faketestacc = sum([1 if LogRegClassifier((df_fake['text'][i]))=='Fake' else 0 for i in range(len(df_fake['text']))])/df_fake['text'].size
+    #print(f'The accuracy of the real news test set of data with the Logistic Regression Classifier is {round(realtestacc * 100, 2)}%')
+    #print(f'The accuracy of the fake news test set of data with the Logistic Regression Classifier is {round(faketestacc * 100, 2)}%')
+
+### -------------------------------- END OF LOGISTIC REGRESSION CLASSIFICATION
+
+### -------------------------------- NAIVE - BAYES CLASSIFICATION
+
+def NBClassifier(newtext):
+    NB = MultinomialNB()
+    vec_newtest=tfidf_vectorizer.transform([newtext])
+    NB.fit(vec_train2, y2_train)
+    NB_pred=NB.predict(vec_newtest)
+    return NB_pred[0] 
+
+def NBAccuracy():
+    NB = MultinomialNB()
+    NB.fit(vec_train2, y2_train)
+    NBAccuracy = NB.score(vec_test2, y2_test)
+    print(f'Naive-Bayes Accuracy: {round(NBAccuracy * 100,2)}%')
+    return NBAccuracy
+    #realtestacc = sum([1 if NBClassifier((df_true['text'][i]))=='Real' else 0 for i in range(len(df_true['text']))])/df_true['text'].size    
+    #faketestacc = sum([1 if NBClassifier((df_fake['text'][i]))=='Fake' else 0 for i in range(len(df_fake['text']))])/df_fake['text'].size
+    #print(f'The accuracy of the real news test set of data with the Naive-Bayes Classifier is {round(realtestacc * 100, 2)}%')
+    #print(f'The accuracy of the fake news test set of data with the Naive-Bayes Classifier is {round(faketestacc * 100, 2)}%')
+
+### -------------------------------- END OF NAIVE - BAYES CLASSIFICATION
+
+### -------------------------------- RANDOM FORREST CLASSIFICATION
+
+def RandForClassifier(newtext):
+    randfor = RandomForestClassifier()
+    vec_newtest=tfidf_vectorizer.transform([newtext])
+    randfor.fit(vec_train2, y2_train)
+    randfor_pred=randfor.predict(vec_newtest)
+    return randfor_pred[0] 
+
+def RandForAccuracy():
+    rfc = RandomForestClassifier()
+    rfc.fit(vec_train2, y2_train)
+    RFAccuracy = rfc.score(vec_test2, y2_test)
+    print(f'Random Forrest Accuracy: {round(RFAccuracy * 100,2)}%')
+    return RFAccuracy
+    #realtestacc = sum([1 if RandForClassifier((df_true['text'][i]))=='Real' else 0 for i in range(len(df_true['text']))])/df_true['text'].size    
+    #faketestacc = sum([1 if RandForClassifier((df_fake['text'][i]))=='Fake' else 0 for i in range(len(df_fake['text']))])/df_fake['text'].size
+    #print(f'The accuracy of the real news test set of data with the Random Forrest Classifier is {round(realtestacc * 100, 2)}%')
+    #print(f'The accuracy of the fake news test set of data with the Random Forrest Classifier is {round(faketestacc * 100, 2)}%')
+
+### -------------------------------- END OF RANDOM FORREST CLASSIFICATION
+
+def EnsembleClassifier(newtext):
+    pacacc = PACAccuracy()
+    dtacc = DecTreeAccuracy()
+    logregacc = LogRegAccuracy()
+    nbacc = NBAccuracy()
+    randforacc = RandForAccuracy()
+    
+    pacvote = PACClassifier(newtext)
+    dtvote = DecTreeClassifier(newtext)
+    logregvote = LogRegClassifier(newtext)
+    nbvote = NBClassifier(newtext)
+    randforvote = RandForClassifier(newtext)
+    
+    pacval = convertval(pacvote)
+    dtval = convertval(dtvote)
+    logregval = convertval(logregvote)
+    nbval = convertval(nbvote)
+    randforval = convertval(randforvote)
+    
+    print("pacacc is ",pacacc)
+    print("pacvote is ",pacvote)
+    print("pacval is ",pacval)
+    
+    accuracyval = ((pacacc * pacval) +
+                   (dtacc * dtval) +
+                   (logregacc * logregval) +
+                   (nbacc * nbval) +
+                   (randforacc * randforval))
+    
+    
+    
+    percacc = (abs(accuracyval) / 5) * 100
+    
+    if accuracyval < 0:
+        realorfake = "Fake"
+    else:
+        realorfake = "True"
+    print(f'The following article has a {percacc}% chance of being' + realorfake)
+    return f'The following article has a {percacc}% chance of being ' + realorfake
+
+
+def convertval(trueorfalse):
+    if trueorfalse == False:
+        return -1
+    else:
+        return 1
+    
+    
+
+### -------------------------------- USER INPUT
+
+def mainmenu():
+    mainmenu = input("press 1 to see the PAC accuracy and 2 for article input")
+
+    if(mainmenu == "1"):
+        PACAccuracy()
+        
+    elif(mainmenu == "2"):
+        articleinput = input("Please paste the article here")
+        print(EnsembleClassifier(articleinput))
+        
+    elif(mainmenu == "3"):
+        print("exiting ...")
+        
+    else:
+        print("Invalid input, please try again")
+
+### --------------------------------  END OF USER INPUT
+        
+### -------------------------------- PROGRAM EXECUTION
+        
+mainmenu()
+
+### -------------------------------- END OF PROGRAM EXECUTION
